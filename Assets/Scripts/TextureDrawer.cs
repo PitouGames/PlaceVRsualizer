@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Diagnostics;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -6,7 +8,7 @@ public class TextureDrawer : MonoBehaviour
 {
 
     private Texture2D outputTexture;
-    private RenderTexture outputRenderTexture;
+    private Stopwatch sw = new Stopwatch();
     [SerializeField] private RawImage rawImage;
     [SerializeField] private Text dateText;
 
@@ -16,28 +18,24 @@ public class TextureDrawer : MonoBehaviour
 
     private void Start()
     {
-        outputTexture = new Texture2D(TilesManager.IMAGE_RESOLUTION, TilesManager.IMAGE_RESOLUTION, TextureFormat.ARGB32, false);
+        outputTexture = new Texture2D(TilesManager.IMAGE_RESOLUTION, TilesManager.IMAGE_RESOLUTION, TextureFormat.RGB24, false);
         outputTexture.filterMode = FilterMode.Point;
+        outputTexture.anisoLevel = 16;
         //outputRenderTexture = GetRenderTexture();
         rawImage.texture = outputTexture;
-        Invoke("Draw", 0.2f);
-    }
-    private void Draw()
-    {
-        //DrawAt(131356345873720000);
-        DrawAt(131357123357390000);
-        //DrawToIndex(10000);
+        StartCoroutine(WaitLoading());
     }
 
-    /*private RenderTexture GetRenderTexture()
+    private IEnumerator WaitLoading()
     {
-        RenderTexture ret = new RenderTexture(TilesManager.IMAGE_RESOLUTION, TilesManager.IMAGE_RESOLUTION, 0, RenderTextureFormat.ARGB32);
-        ret.filterMode = FilterMode.Point;
-        ret.wrapMode = TextureWrapMode.Clamp;
-        ret.enableRandomWrite = true;
-        ret.Create();
-        return ret;
-    }*/
+        WaitForEndOfFrame wait = new WaitForEndOfFrame();
+        while (tilesManager.IsLoading) {
+            yield return wait;
+        }
+        UnityEngine.Debug.Log($"Loading finished in {Time.time}sec");
+        lastTimestamp = tilesManager.EndTime;
+        DrawAt(tilesManager.StartTime);
+    }
 
     public void Draw(float progress)
     {
@@ -47,18 +45,30 @@ public class TextureDrawer : MonoBehaviour
 
     private void DrawAt(ulong timestamp)
     {
-        DateTime moment = DateTime.FromFileTimeUtc((long)timestamp);
-        dateText.text = moment.ToShortDateString() + " " + moment.ToLongTimeString();
-        if (lastTimestamp > timestamp) {
-            currentIndex = tilesManager.ApplyMapTextureAt(timestamp, outputTexture); // recompute since the begining.
-        } else {
-            currentIndex = tilesManager.ApplyMapTextureDiff(currentIndex, timestamp, outputTexture); // recompute only the difference.
+        if (!tilesManager.IsLoading) {
+            //sw.Restart();
+            DateTime moment = DateTime.FromFileTimeUtc((long)timestamp);
+            dateText.text = moment.ToShortDateString() + " " + moment.ToLongTimeString();
+            if (timestamp < lastTimestamp) { // Going backward
+                                             // recompute since the begining.
+                //UnityEngine.Debug.Log($"DrawAt use ApplyMapTextureAt");
+                currentIndex = tilesManager.ApplyMapTextureAt(timestamp, outputTexture);
+            } else {
+                // recompute only the difference with actual frame.
+                //UnityEngine.Debug.Log($"DrawAt use ApplyMapTextureDiff");
+                currentIndex = tilesManager.ApplyMapTextureDiff(currentIndex, timestamp, outputTexture);
+            }
+            lastTimestamp = timestamp;
+            //sw.Stop();
+            //UnityEngine.Debug.Log($"DrawAt took {sw.Elapsed}");
+            //sw.Reset();
         }
-        lastTimestamp = timestamp;
     }
 
     private void DrawToIndex(int index)
     {
-        tilesManager.ApplyMapTextureToTileIndex(index, outputTexture);
+        if (!tilesManager.IsLoading) {
+            tilesManager.ApplyMapTextureToTileIndex(index, outputTexture);
+        }
     }
 }

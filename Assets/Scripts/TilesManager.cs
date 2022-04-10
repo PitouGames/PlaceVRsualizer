@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using UnityEngine;
@@ -6,6 +8,7 @@ public class TilesManager : MonoBehaviour
 {
     public enum LoadingState { LoadingFile, ComputeKeyframes, Finished }
     public LoadingState CurrentLoadingState { get; private set; }
+    public Action OnLoadStart;
     public int KeyframesProgress { get; private set; }
 
     //private List<Tile> tiles = new List<Tile>();
@@ -22,43 +25,72 @@ public class TilesManager : MonoBehaviour
     public ulong StartTime { get; private set; }
     public ulong EndTime { get; private set; }
 
-    public const ushort IMAGE_RESOLUTION = 1000;
-    public const uint IMAGE_RESOLUTION_SQUARED = IMAGE_RESOLUTION * IMAGE_RESOLUTION;
+    //public const ushort IMAGE_RESOLUTION = 1000;
+    //public const uint IMAGE_RESOLUTION_SQUARED = IMAGE_RESOLUTION * IMAGE_RESOLUTION;
 
-    public const int KEYFRAMES_INTERVAL = 50_000;
+    //public const int KEYFRAMES_INTERVAL = 1_000_000;
+
+    public Dataset Dataset { get; private set; }
 
 
     private void Start()
     {
-        //ConvertCSVToBinary();
-        //UnityEngine.Debug.Log($"tiles.Count: {tiles.Count}");
-        tilesLoadThread = new Thread(() => {
+        SetDataset(true);
+    }
+
+    private void OnDestroy()
+    {
+        tiles = null; // free memory
+        GC.Collect();
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="dataset2022"> True to load 2022 data, false to load 2017 data. </param>
+    public void SetDataset(bool dataset2022)
+    {
+        Dataset datasetToLoad = null;
+        if (dataset2022 && !(Dataset is Dataset2022)) {
+            datasetToLoad = new Dataset2022();
+        } else if (!(Dataset is Dataset2017)) {
+            datasetToLoad = new Dataset2017();
+        }
+
+        if (datasetToLoad != null) {
+            Dataset = datasetToLoad;
+            if (tilesLoadThread != null && tilesLoadThread.IsAlive) {
+                tilesLoadThread.Abort();
+            }
             CurrentLoadingState = LoadingState.LoadingFile;
-            ReadFromBinary();
-            CurrentLoadingState = LoadingState.ComputeKeyframes;
-            GenerateKeyframes();
-            CurrentLoadingState = LoadingState.Finished;
-        });
-        tilesLoadThread.Start();
+            tilesLoadThread = new Thread(() => {
+                ReadFromBinary(Dataset.fileName);
+                CurrentLoadingState = LoadingState.ComputeKeyframes;
+                GenerateKeyframes();
+                CurrentLoadingState = LoadingState.Finished;
+            });
+            tilesLoadThread.Start();
+            OnLoadStart?.Invoke();
+        }
     }
 
     private void GenerateKeyframes()
     {
-        KeyframesCount = (int)(TilesCount / KEYFRAMES_INTERVAL + 1);
+        KeyframesCount = (int)(TilesCount / Dataset.keyframeInterval + 1);
         Keyframes = new Keyframe[KeyframesCount];
         for (int i = 0; i < Keyframes.Length; i++) {
-            Keyframes[i].index = i * KEYFRAMES_INTERVAL;
-            Keyframes[i].colors = new Color[IMAGE_RESOLUTION_SQUARED];
+            Keyframes[i].index = i * Dataset.keyframeInterval;
+            Keyframes[i].colors = new Color[Dataset.imageResolutionSquared];
             if (i == 0) {
-                for (ushort x = 0; x < IMAGE_RESOLUTION; x++) {
-                    for (ushort y = 0; y < IMAGE_RESOLUTION; y++) {
-                        Keyframes[i].colors[y * IMAGE_RESOLUTION + x] = Color.white;
+                for (ushort x = 0; x < Dataset.imageResolution; x++) {
+                    for (ushort y = 0; y < Dataset.imageResolution; y++) {
+                        Keyframes[i].colors[y * Dataset.imageResolution + x] = Color.white;
                     }
                 }
                 Keyframes[i].timestamp = StartTime;
             } else {
                 Keyframes[i - 1].colors.CopyTo(Keyframes[i].colors, 0);
-                Keyframes[i].timestamp = ApplyMapColorsDiff((i - 1) * KEYFRAMES_INTERVAL, i * KEYFRAMES_INTERVAL, Keyframes[i].colors);
+                Keyframes[i].timestamp = ApplyMapColorsDiff((i - 1) * Dataset.keyframeInterval, i * Dataset.keyframeInterval, Keyframes[i].colors);
             }
             KeyframesProgress = i + 1;
         }
@@ -82,7 +114,7 @@ public class TilesManager : MonoBehaviour
                 break;
             }
             if (t.x == x && t.y == y) {
-                res = t.Color;
+                res = Dataset.colors[t.colorCode];
             }
         }
         return res;
@@ -90,22 +122,22 @@ public class TilesManager : MonoBehaviour
 
     public Color[] GetMapColorsAt(ulong time)
     {
-        Color[] result = new Color[IMAGE_RESOLUTION_SQUARED];
+        Color[] result = new Color[Dataset.imageResolutionSquared];
         foreach (Tile t in tiles) {
             if (t.timeStamp > time) {
                 break;
             }
-            result[t.y * IMAGE_RESOLUTION + t.x] = t.Color;
+            result[t.y * Dataset.imageResolution + t.x] = Dataset.colors[t.colorCode];
         }
         return result;
     }
 
     public (ulong, Color[]) GetMapColorsAtIndex(int index)
     {
-        Color[] result = new Color[IMAGE_RESOLUTION_SQUARED];
-        for (ushort x = 0; x < IMAGE_RESOLUTION; x++) {
-            for (ushort y = 0; y < IMAGE_RESOLUTION; y++) {
-                result[y * IMAGE_RESOLUTION + x] = Color.white;
+        Color[] result = new Color[Dataset.imageResolutionSquared];
+        for (ushort x = 0; x < Dataset.imageResolution; x++) {
+            for (ushort y = 0; y < Dataset.imageResolution; y++) {
+                result[y * Dataset.imageResolution + x] = Color.white;
             }
         }
         int i = 0;
@@ -114,8 +146,8 @@ public class TilesManager : MonoBehaviour
             if (i > index) {
                 break;
             }
-            if (t.y < IMAGE_RESOLUTION && t.x < IMAGE_RESOLUTION) {
-                result[t.y * IMAGE_RESOLUTION + t.x] = t.Color;
+            if (t.y < Dataset.imageResolution && t.x < Dataset.imageResolution) {
+                result[t.y * Dataset.imageResolution + t.x] = Dataset.colors[t.colorCode];
                 lastTimestamp = t.timeStamp;
             }
             i++;
@@ -125,15 +157,15 @@ public class TilesManager : MonoBehaviour
 
     public ulong ApplyMapColorsDiff(int startIndex, int endIndex, Color[] result)
     {
-        Debug.Assert(result.Length == IMAGE_RESOLUTION_SQUARED);
+        Debug.Assert(result.Length == Dataset.imageResolutionSquared);
 
         endIndex = Mathf.Min(endIndex, (int)TilesCount);
         ulong lastTimestamp = 0;
         Tile t;
         for (int i = startIndex; i < endIndex; i++) {
             t = tiles[i];
-            if (t.y < IMAGE_RESOLUTION && t.x < IMAGE_RESOLUTION) {
-                result[t.y * IMAGE_RESOLUTION + t.x] = t.Color;
+            if (t.y < Dataset.imageResolution && t.x < Dataset.imageResolution) {
+                result[t.y * Dataset.imageResolution + t.x] = Dataset.colors[t.colorCode];
             }
             lastTimestamp = t.timeStamp;
         }
@@ -151,7 +183,7 @@ public class TilesManager : MonoBehaviour
             if (t.timeStamp > timestamp) {
                 break;
             }
-            texture.SetPixel(t.x, t.y, t.Color);
+            texture.SetPixel(t.x, t.y, Dataset.colors[t.colorCode]);
         }
         texture.Apply();
         return j;
@@ -166,7 +198,7 @@ public class TilesManager : MonoBehaviour
             if (i > index) {
                 break;
             }
-            texture.SetPixel(t.x, t.y, t.Color);
+            texture.SetPixel(t.x, t.y, Dataset.colors[t.colorCode]);
             lastTimestamp = t.timeStamp;
             i++;
         }
@@ -185,8 +217,8 @@ public class TilesManager : MonoBehaviour
     {
         int keyFrameIndex = FindPreviousKeyframeIndex(timestamp);
 
-        if (keyFrameIndex * KEYFRAMES_INTERVAL > startIndex) {
-            startIndex = keyFrameIndex * KEYFRAMES_INTERVAL;
+        if (keyFrameIndex * Dataset.keyframeInterval > startIndex) {
+            startIndex = keyFrameIndex * Dataset.keyframeInterval;
             texture.SetPixels(Keyframes[keyFrameIndex].colors);
         }
 
@@ -196,7 +228,7 @@ public class TilesManager : MonoBehaviour
             if (tiles[i].timeStamp > timestamp) {
                 break;
             }
-            texture.SetPixel(tiles[i].x, tiles[i].y, tiles[i].Color);
+            texture.SetPixel(tiles[i].x, tiles[i].y, Dataset.colors[tiles[i].colorCode]);
         }
         texture.Apply();
         return i;
@@ -204,8 +236,8 @@ public class TilesManager : MonoBehaviour
 
     private void ClearTexture(Texture2D texture)
     {
-        for (ushort x = 0; x < IMAGE_RESOLUTION; x++) {
-            for (ushort y = 0; y < IMAGE_RESOLUTION; y++) {
+        for (ushort x = 0; x < Dataset.imageResolution; x++) {
+            for (ushort y = 0; y < Dataset.imageResolution; y++) {
                 texture.SetPixel(x, y, Color.white);
             }
         }
@@ -227,48 +259,24 @@ public class TilesManager : MonoBehaviour
     /// <summary>
     /// Load a binary file to the tiles array.
     /// </summary>
-    private void ReadFromBinary()
+    private void ReadFromBinary(string binaryFileName)
     {
-        using (FileStream reader = new FileStream(@"Data/2017_place_tiles_sorted_no_user.bin", FileMode.Open, FileAccess.Read)) {
+        using (FileStream reader = new FileStream($@"Data/{binaryFileName}.bin", FileMode.Open, FileAccess.Read)) {
             MemoryStream memoryStream = new MemoryStream();
             reader.CopyTo(memoryStream);
-            TilesCount = memoryStream.Length / Tile.Size;
+            TilesCount = memoryStream.Length / Tile.SIZE;
             tiles = new Tile[TilesCount];
             memoryStream.Seek(0, SeekOrigin.Begin);
             BinaryReader binaryReader = new BinaryReader(memoryStream);
             for (int i = 0; i < TilesCount; i++) {
                 tiles[i] = new Tile(binaryReader.ReadUInt64(), binaryReader.ReadUInt16(), binaryReader.ReadUInt16(), binaryReader.ReadByte());
+                if (tiles[i].colorCode < 0 || tiles[i].colorCode > 31) {
+                    Debug.Log(tiles[i]);
+                }
             }
             StartTime = TilesCount > 0 ? tiles[0].timeStamp : 0;
             EndTime = TilesCount > 0 ? tiles[TilesCount - 1].timeStamp : 0;
-        }
-    }
-
-    /// <summary>
-    /// Used to convert the CSV data to a binary file.
-    /// Note: tiles placement should be sorted by timestamp ascending.
-    /// </summary>
-    private void ConvertCSVToBinary()
-    {
-        using (MemoryStream memoryStream = new MemoryStream())
-        using (BinaryWriter binaryWriter = new BinaryWriter(memoryStream))
-        using (StreamReader reader = new StreamReader(@"Data/2017_place_tiles_sorted_no_user.csv")) {
-            reader.ReadLine(); // skip header line
-            Tile t;
-            string line;
-            while (!reader.EndOfStream) {
-                line = reader.ReadLine();
-                t = Tile.FromCSV(line);
-                binaryWriter.Write(t.timeStamp);
-                binaryWriter.Write(t.x);
-                binaryWriter.Write(t.y);
-                binaryWriter.Write(t.colorCode);
-            }
-
-            memoryStream.Seek(0, SeekOrigin.Begin);
-            using (FileStream fileStream = new FileStream(@"Data/2017_place_tiles_sorted_no_user.bin", FileMode.Create, FileAccess.Write)) {
-                memoryStream.CopyTo(fileStream);
-            }
+            Debug.Log($"Loaded {TilesCount} tiles.");
         }
     }
 }

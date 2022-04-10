@@ -16,14 +16,32 @@ public class TextureDrawer : MonoBehaviour
     private ulong lastTimestamp;
     private int currentIndex;
 
-    private void Start()
+    private void Awake()
     {
-        outputTexture = new Texture2D(TilesManager.IMAGE_RESOLUTION, TilesManager.IMAGE_RESOLUTION, TextureFormat.RGB24, false);
+        tilesManager.OnLoadStart += Setup;
+    }
+
+    private void OnDestroy()
+    {
+        tilesManager.OnLoadStart -= Setup;
+    }
+
+    private void Setup()
+    {
+        SetupTexture();
+        //outputRenderTexture = GetRenderTexture();
+        StartCoroutine(WaitLoading());
+    }
+
+    private void SetupTexture()
+    {
+        if (outputTexture != null) {
+            DestroyImmediate(outputTexture);
+        }
+        outputTexture = new Texture2D(tilesManager.Dataset.imageResolution, tilesManager.Dataset.imageResolution, TextureFormat.RGB24, false);
         outputTexture.filterMode = FilterMode.Point;
         outputTexture.anisoLevel = 16;
-        //outputRenderTexture = GetRenderTexture();
         rawImage.texture = outputTexture;
-        StartCoroutine(WaitLoading());
     }
 
     private IEnumerator WaitLoading()

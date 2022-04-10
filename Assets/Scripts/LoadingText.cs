@@ -31,7 +31,7 @@ public class LoadingText : MonoBehaviour
             }
             m_text.text = sb.ToString();
         } else {
-            Destroy(gameObject);
+            m_text.text = "";
         }
     }
 }

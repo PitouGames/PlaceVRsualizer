@@ -1,6 +1,7 @@
 using System.IO;
 using UnityEditor;
 using UnityEditor.Callbacks;
+using UnityEngine;
 
 public class BuildEditor
 {
@@ -8,9 +9,34 @@ public class BuildEditor
     [PostProcessBuild(10)]
     public static void OnPostProcessBuild(BuildTarget target, string pathToBuiltProject)
     {
-        string playerPath = Path.GetDirectoryName(pathToBuiltProject);
-        string dataPath = playerPath + "/Data";
-        DirectoryCopy("Data", dataPath, true);
+        string dataPath = Path.Combine(Path.GetDirectoryName(pathToBuiltProject), "Data");
+        CopyBinaryFiles("Data", dataPath);
+    }
+
+    private static void CopyBinaryFiles(string sourceDirName, string destDirName)
+    {
+        DirectoryInfo dir = new DirectoryInfo(sourceDirName);
+
+        if (!dir.Exists) {
+            throw new DirectoryNotFoundException(
+                "Source directory does not exist or could not be found: "
+                + sourceDirName);
+        }
+
+        // If the destination directory doesn't exist, create it.       
+        Directory.CreateDirectory(destDirName);
+
+        // Get the files in the directory and copy them to the new location.
+        FileInfo[] files = dir.GetFiles();
+        foreach (FileInfo file in files) {
+            Debug.Log(file.FullName + " " + file.Extension);
+            if (file.Extension == ".bin") {
+                string path = Path.Combine(destDirName, file.Name);
+                if (!File.Exists(path)) {
+                    file.CopyTo(path, false);
+                }
+            }
+        }
     }
 
     /// <summary>

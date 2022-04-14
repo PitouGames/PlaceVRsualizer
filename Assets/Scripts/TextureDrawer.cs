@@ -50,9 +50,11 @@ public class TextureDrawer : MonoBehaviour
         while (tilesManager.IsLoading) {
             yield return wait;
         }
-        UnityEngine.Debug.Log($"Loading finished in {Time.time}sec");
-        lastTimestamp = tilesManager.EndTime;
-        DrawAt(tilesManager.StartTime);
+        if (tilesManager.TilesCount > 0) {
+            UnityEngine.Debug.Log($"Loading finished in {Time.time}sec");
+            lastTimestamp = tilesManager.EndTime;
+            DrawAt(tilesManager.StartTime);
+        }
     }
 
     public void Draw(float progress)

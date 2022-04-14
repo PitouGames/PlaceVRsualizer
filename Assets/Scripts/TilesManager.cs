@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using UnityEngine;
@@ -35,20 +34,22 @@ public class TilesManager : MonoBehaviour
 
     private void Start()
     {
-        SetDataset(true);
+        if (SystemInfo.systemMemorySize < 16341) {
+            Debug.LogWarning("Less than 16GB of RAM detected. Application need at least 12GB of RAM to work and may be unstable.");
+        }
+        LoadDataset(true);
     }
 
     private void OnDestroy()
     {
-        tiles = null; // free memory
-        GC.Collect();
+        FreeMemory();
     }
 
     /// <summary>
-    /// 
+    /// Load a dataset.
     /// </summary>
     /// <param name="dataset2022"> True to load 2022 data, false to load 2017 data. </param>
-    public void SetDataset(bool dataset2022)
+    public void LoadDataset(bool dataset2022)
     {
         Dataset datasetToLoad = null;
         if (dataset2022 && !(Dataset is Dataset2022)) {
@@ -58,10 +59,8 @@ public class TilesManager : MonoBehaviour
         }
 
         if (datasetToLoad != null) {
+            FreeMemory();
             Dataset = datasetToLoad;
-            if (tilesLoadThread != null && tilesLoadThread.IsAlive) {
-                tilesLoadThread.Abort();
-            }
             CurrentLoadingState = LoadingState.LoadingFile;
             tilesLoadThread = new Thread(() => {
                 ReadFromBinary(Dataset.fileName);
@@ -94,6 +93,23 @@ public class TilesManager : MonoBehaviour
             }
             KeyframesProgress = i + 1;
         }
+    }
+
+    private void FreeMemory()
+    {
+        if (tilesLoadThread != null && tilesLoadThread.IsAlive) {
+            tilesLoadThread.Abort();
+        }
+        TilesCount = 0;
+        tiles = null;
+        KeyframesCount = 0;
+        KeyframesProgress = 0;
+        Keyframes = null;
+#if UNITY_EDITOR
+        UnityEditor.EditorUtility.UnloadUnusedAssetsImmediate();
+#endif
+        Resources.UnloadUnusedAssets();
+        GC.Collect();
     }
 
     private Tile? GetTileAFter(ulong time)
@@ -261,22 +277,27 @@ public class TilesManager : MonoBehaviour
     /// </summary>
     private void ReadFromBinary(string binaryFileName)
     {
-        using (FileStream reader = new FileStream($@"Data/{binaryFileName}.bin", FileMode.Open, FileAccess.Read)) {
-            MemoryStream memoryStream = new MemoryStream();
-            reader.CopyTo(memoryStream);
-            TilesCount = memoryStream.Length / Tile.SIZE;
-            tiles = new Tile[TilesCount];
-            memoryStream.Seek(0, SeekOrigin.Begin);
-            BinaryReader binaryReader = new BinaryReader(memoryStream);
-            for (int i = 0; i < TilesCount; i++) {
-                tiles[i] = new Tile(binaryReader.ReadUInt64(), binaryReader.ReadUInt16(), binaryReader.ReadUInt16(), binaryReader.ReadByte());
-                if (tiles[i].colorCode < 0 || tiles[i].colorCode > 31) {
-                    Debug.Log(tiles[i]);
+        try {
+            using (FileStream reader = new FileStream($@"Data/{binaryFileName}.bin", FileMode.Open, FileAccess.Read)) {
+                MemoryStream memoryStream = new MemoryStream();
+                reader.CopyTo(memoryStream);
+                TilesCount = memoryStream.Length / Tile.SIZE;
+                tiles = new Tile[TilesCount];
+                memoryStream.Seek(0, SeekOrigin.Begin);
+                BinaryReader binaryReader = new BinaryReader(memoryStream);
+                for (int i = 0; i < TilesCount; i++) {
+                    tiles[i] = new Tile(binaryReader.ReadUInt64(), binaryReader.ReadUInt16(), binaryReader.ReadUInt16(), binaryReader.ReadByte());
+                    if (tiles[i].colorCode < 0 || tiles[i].colorCode > 31) {
+                        Debug.Log(tiles[i]);
+                    }
                 }
+                StartTime = TilesCount > 0 ? tiles[0].timeStamp : 0;
+                EndTime = TilesCount > 0 ? tiles[TilesCount - 1].timeStamp : 0;
+                Debug.Log($"Loaded {TilesCount} tiles.");
             }
-            StartTime = TilesCount > 0 ? tiles[0].timeStamp : 0;
-            EndTime = TilesCount > 0 ? tiles[TilesCount - 1].timeStamp : 0;
-            Debug.Log($"Loaded {TilesCount} tiles.");
+        } catch (FileNotFoundException e) {
+            Debug.LogError(e);
+            Debug.LogWarning("Have you downloaded the binary file and placed them in the data folder? Use Unity editor menu \"place -> Open binary download page\".");
         }
     }
 }

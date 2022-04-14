@@ -41,7 +41,7 @@ public class Dataset2022 : Dataset
     public string fileName => "2022_place_tiles_sorted_no_user";
     public int imageResolution => 2000;
     public int imageResolutionSquared => 4_000_000;
-    public int keyframeInterval => 1_000_000;
+    public int keyframeInterval => 2_000_000;
     public Color[] colors => _colors;
     private Color[] _colors = new Color[] {
         new Color32(109, 0, 26, 255),

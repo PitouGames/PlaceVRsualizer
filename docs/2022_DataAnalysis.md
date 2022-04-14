@@ -51,7 +51,7 @@ The script find 20 lines containing 4 coordinates, that mean there were 20 moder
 
 ## SQL lite import
 
-Import the CSV file as a new table. The table should have this schema:
+Import the reformated CSV file as a new table. The table should have this schema:
 
 ```sql
 CREATE TABLE "place_tiles" (
@@ -122,45 +122,51 @@ Color usage:
 SELECT color, COUNT(*) as count FROM place_tiles GROUP BY color ORDER BY count DESC;
 --79738ms
 ```
-code | count
------|------
-27	 | 33707367
-31	 | 32251013
-2	 | 14411389
-12	 | 9989853
-4	 | 8519392
-1	 | 5911641
-14	 | 5700301
-18	 | 5245484
-3	 | 5059970
-23	 | 4917801
-13	 | 4058046
-6	 | 3892844
-29	 | 3459386
-8	 | 3417232
-30	 | 3324082
-25	 | 2473639
-26	 | 2104844
-22	 | 1458772
-19	 | 1287671
-24	 | 1261416
-7	 | 1200066
-15	 | 1139350
-5	 | 954604
-28	 | 868769
-0	 | 621194
-21	 | 589211
-9	 | 572572
-16	 | 499233
-17	 | 454140
-10	 | 436068
-20	 | 350873
-11	 | 214862
+code | count    | human color
+-----|----------|------------
+27	 | 33707367 | black
+31	 | 32251013 | white
+2	 | 14411389 | red
+12	 | 9989853  | dark blue
+4	 | 8519392  | yellow
+1	 | 5911641  | dark red
+14	 | 5700301  | light blue
+18	 | 5245484  | dark purple
+3	 | 5059970  | orange
+23	 | 4917801  | light pink
+13	 | 4058046  | blue
+6	 | 3892844  | dark green
+29	 | 3459386  | gray
+8	 | 3417232  | light green
+30	 | 3324082  | light gray
+25	 | 2473639  | brown
+26	 | 2104844  | beige
+22	 | 1458772  | pink
+19	 | 1287671  | purple
+24	 | 1261416  | dark brown
+7	 | 1200066  | green
+15	 | 1139350  | indigo
+5	 | 954604   | pale yellow
+28	 | 868769   | dark gray
+0	 | 621194   | darkest red
+21	 | 589211   | magenta
+9	 | 572572   | dark teal
+16	 | 499233   | periwinkle
+17	 | 454140   | lavender
+10	 | 436068   | teal
+20	 | 350873   | pale purple
+11	 | 214862   | light teal
 
-User places tiles:
+<hr>
+
+User sorted by number of placed tiles:
+
 ```sql
 SELECT user_hash, COUNT(*) as count FROM place_tiles GROUP BY user_hash ORDER BY count DESC LIMIT 100;
 ```
+
+<details>
+  <summary>Result</summary>
 
 user_hash                                                                                | count
 -----------------------------------------------------------------------------------------|------
@@ -264,3 +270,55 @@ QoXIu3nGGuETMkSjackfmJyodmhinTwQlp9yXx5YXNgvDXLticl6d0z407lvc0VIVv5dypFNsLpMKX4j
 xE/9iYj+5Ibs1iJBfZTPkl9sb+uanObfFRQ2eobQzRNJj7WfYjEJQlCy1CXsI5dLEtqxy7o+jYwjiHFna/VfyA== | 590
 8X5MeaHWObB+v97F5ls365qJbwvVpg/alejZ2Z2yNmAdBcxjSQeAsme4lD7qDEhyKAHnyZZ+yAcszv7Nvq5SOQ== | 589
 sHszYnyAVihPXwuTVeIq9sgI1Mf8/78T+A6UFAiZZtc2+j/oP7FSKjKdWhK4dT0qzxqP0CZYYzF5MrUJNhgYDw== | 589
+</details>
+
+<hr>
+
+First tiles placed
+
+```sql
+SELECT * FROM place_tiles ORDER BY timestamp ASC LIMIT 100;
+```
+
+<details>
+  <summary>Result</summary>
+
+</details>
+
+<hr>
+
+First tiles placed on the second canvas
+```sql
+SELECT * FROM place_tiles WHERE x_coordinate >= 1000 AND y_coordinate < 1000 ORDER BY timestamp ASC LIMIT 10;
+```
+
+<details>
+  <summary>Result</summary>
+
+</details>
+
+<hr>
+
+First tiles placed on the last canvas extention
+
+```sql
+SELECT * FROM place_tiles WHERE y_coordinate >= 1000 ORDER BY timestamp ASC LIMIT 10;
+```
+
+<details>
+  <summary>Result</summary>
+
+</details>
+
+<hr>
+
+Last colored tiles placed
+
+```sql
+SELECT * FROM place_tiles WHERE color != 31 ORDER BY timestamp ASC LIMIT 100;
+```
+
+<details>
+  <summary>Result</summary>
+
+</details>

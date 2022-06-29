@@ -8,7 +8,7 @@ public class TextureDrawer : MonoBehaviour
 {
 
     private Texture2D outputTexture;
-    private Stopwatch sw = new Stopwatch();
+    //private Stopwatch sw = new Stopwatch();
     [SerializeField] private RawImage rawImage;
     [SerializeField] private Text dateText;
 
@@ -65,7 +65,7 @@ public class TextureDrawer : MonoBehaviour
 
     private void DrawAt(ulong timestamp)
     {
-        if (!tilesManager.IsLoading) {
+        if (!tilesManager.IsLoading && tilesManager.TilesCount > 0) {
             //sw.Restart();
             DateTime moment = DateTime.FromFileTimeUtc((long)timestamp);
             dateText.text = moment.ToShortDateString() + " " + moment.ToLongTimeString();
